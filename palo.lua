@@ -21,11 +21,9 @@ local frame = container:FindFirstChild("CanvasGroup")
     and container.CanvasGroup.Frame
     or container.Frame
 
-local page = frame:GetChildren()[2]
-local item = page:GetChildren()[5].Frame
+local button = frame.ScrollingFrame:GetChildren()[5].Frame:GetChildren()[7].TextButton
 
-local button = item:GetChildren()[7].TextButton
-local statusLabel = item:GetChildren()[7].TextLabel
+local statusLabel = frame:GetChildren()[2]:GetChildren()[5].Frame:GetChildren()[7].TextLabel
 
 local function click(btn)
     if not btn or not firesignal then
@@ -49,56 +47,7 @@ local function ClickDisable()
         click(button)
     end
 end
-local CoreGui = game:GetService("CoreGui")
-
-local obsidian
-for _, v in ipairs(CoreGui:GetDescendants()) do
-    if v.Name == "Obsidian" then
-        obsidian = v
-        break
-    end
-end
-
-if not obsidian then
-    warn("Obsidian not found")
-    return
-end
-
-local container = obsidian.Main.Container
-local frame = container:FindFirstChild("CanvasGroup")
-    and container.CanvasGroup.Frame
-    or container.Frame
-
-local page = frame:GetChildren()[2]
-local item = page:GetChildren()[5].Frame
-
-local button = item:GetChildren()[7].TextButton
-local statusLabel = item:GetChildren()[7].TextLabel
-
-local function click(btn)
-    if not btn or not firesignal then
-        return
-    end
-
-    pcall(firesignal, btn.Activated)
-    pcall(firesignal, btn.MouseButton1Click)
-    pcall(firesignal, btn.MouseButton1Down)
-    pcall(firesignal, btn.MouseButton1Up)
-end
-
-local function ClickEnable()
-    if statusLabel.Text == "Status : Off 🔴" then
-        click(button)
-    end
-end
-
-local function ClickDisable()
-    if statusLabel.Text == "Status : On 🟢" then
-        click(button)
-    end
-end
-
-ClickEnable() 
+ClickEnable()
 task.wait(1)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
