@@ -1,5 +1,6 @@
 repeat task.wait() until game:IsLoaded()
-task.wait(3)
+loadstring(game:HttpGet("https://hybrid-e3.com/api/scripts/607034550f534374b8fc5feb1c6ef466/loader?key=PAID-4LJT-0PLB-VM3N-N1FY"))()
+task.wait(2)
 local CoreGui = game:GetService("CoreGui")
 
 local obsidian
@@ -98,7 +99,7 @@ local function ClickDisable()
 end
 
 ClickEnable() 
-
+task.wait(1)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
