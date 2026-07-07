@@ -1,4 +1,46 @@
 repeat task.wait() until game:IsLoaded()
+
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local VIM = game:GetService("VirtualInputManager")
+local LOCAL_PLAYER = Players.LocalPlayer
+
+local function isMobile()
+    return UserInputService.TouchEnabled
+end
+
+local function isPC()
+    return UserInputService.KeyboardEnabled
+        and UserInputService.MouseEnabled
+        and not UserInputService.TouchEnabled
+end
+
+local function simulateTap()
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+    local viewport = camera.ViewportSize
+    local x = 35
+    local y = viewport.Y - 35
+    if isMobile() then
+        pcall(function()
+            VIM:SendTouchEvent(1, 0, x, y)
+            task.wait(0.08)
+            VIM:SendTouchEvent(1, 2, x, y)
+        end)
+    elseif isPC() then
+        pcall(function()
+            VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
+            task.wait(0.05)
+            VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
+        end)
+    end
+end
+
+repeat
+    simulateTap()
+    task.wait(1)
+until not LOCAL_PLAYER:GetAttribute("LoadingScreenActive") or LOCAL_PLAYER:GetAttribute("LoadingScreenDone") == true
+
 loadstring(game:HttpGet("https://hybrid-e3.com/api/scripts/607034550f534374b8fc5feb1c6ef466/loader?key=PAID-4LJT-0PLB-VM3N-N1FY"))()
 task.wait(2)
 local CoreGui = game:GetService("CoreGui")
@@ -49,10 +91,10 @@ local function ClickDisable()
 end
 ClickEnable()
 task.wait(1)
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 local Networking = require(ReplicatedStorage:WaitForChild("SharedModules"):WaitForChild("Networking"))
@@ -66,10 +108,18 @@ NotificationController:CreateNotification(
     Color3.fromRGB(71, 123, 255)
 )
 
+local WEBHOOK_URL = getgenv().Webhook or ""
+local SEND_WEBHOOK = WEBHOOK_URL ~= ""
+local TARGET_NAMES = getgenv().Pets
+local TARGET_SIZES = getgenv().Size
+local EGG_FARM = getgenv().Egg
+if EGG_FARM == nil then
+    EGG_FARM = false
+end
 local SPRINKLER_NAME = "Super Sprinkler"
-local SEED_NAME = "Mega"
+local SEED_NAME = getgenv().Seeds or "Mega"
 local CHECK_FRUIT_NAME = "Carrot"
-local CHECK_FRUIT_MIN_KG = 25
+local CHECK_FRUIT_MIN_KG = getgenv().KG or 40
 local REJOIN_DELAY = 5
 local CENTER_FORWARD_LENGTH = 27
 local CENTER_RIGHT_LENGTH = 30
@@ -92,13 +142,197 @@ local lastCarrotBestLog = 0
 local resolvedCenterPosition
 local State = {
 	Running = true,
-	DepletedHandled = false
+	DepletedHandled = false,
+	TargetFound = false
 }
 
 if _G.PlaceSuperSprinklerCarrotCircleState then
 	_G.PlaceSuperSprinklerCarrotCircleState.Running = false
 end
 _G.PlaceSuperSprinklerCarrotCircleState = State
+
+local function SendWebhook(title, description, color)
+    if not SEND_WEBHOOK then
+        return
+    end
+
+    local payload = {
+        content = "@everyone",
+        embeds = {{
+            title = title,
+            description = string.format(
+                "**Player:** %s\n\n%s",
+                LocalPlayer.Name,
+                description
+            ),
+            color = color or 5763719, -- Discord Green (#57F287)
+            footer = {
+                text = "Made with ❤️ by Jay Hub"
+            },
+            timestamp = DateTime.now():ToIsoDate()
+        }}
+    }
+
+    local ok, err = pcall(function()
+        request({
+            Url = WEBHOOK_URL,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json"
+            },
+            Body = HttpService:JSONEncode(payload)
+        })
+    end)
+
+    if not ok then
+        warn("[Webhook Error]", err)
+    end
+end
+
+local function containsAny(value, options)
+    local lowered = tostring(value or ""):lower()
+    for _, option in ipairs(options) do
+        if lowered:find(tostring(option):lower(), 1, true) then
+            return true, option
+        end
+    end
+    return false
+end
+
+local function isTarget(name, requireSize)
+    if not name then return false end
+
+    if requireSize ~= false then
+        local hasSize = containsAny(name, TARGET_SIZES)
+        if not hasSize then return false end
+    end
+
+    local hasTarget = containsAny(name, TARGET_NAMES)
+    return hasTarget == true
+end
+
+local function isVisibleGui(instance)
+    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    local current = instance
+
+    while current and current ~= playerGui do
+        if current:IsA("ScreenGui") and not current.Enabled then
+            return false
+        end
+
+        if current:IsA("GuiObject") and not current.Visible then
+            return false
+        end
+
+        current = current.Parent
+    end
+
+    return true
+end
+
+local function getTextValue(instance)
+    if instance and (instance:IsA("TextLabel") or instance:IsA("TextButton") or instance:IsA("TextBox")) then
+        return tostring(instance.Text or "")
+    end
+
+    return nil
+end
+
+local function hasVisibleText(root, text)
+    if not root then return false end
+    local wanted = tostring(text or ""):lower()
+
+    for _, instance in ipairs(root:GetDescendants()) do
+        local value = getTextValue(instance)
+        if value and isVisibleGui(instance) and value:lower():find(wanted, 1, true) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function isInActivePetRow(instance)
+    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    local current = instance
+    local depth = 0
+
+    while current and current ~= playerGui and depth < 5 do
+        if hasVisibleText(current, "UNEQUIP") then
+            return true
+        end
+
+        current = current.Parent
+        depth += 1
+    end
+
+    return false
+end
+
+local function checkActivePetGui()
+    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return false end
+
+    for _, instance in ipairs(playerGui:GetDescendants()) do
+        if (instance:IsA("TextLabel") or instance:IsA("TextButton") or instance:IsA("TextBox")) and isVisibleGui(instance) then
+            local text = instance.Text
+            if isTarget(text, false) and isInActivePetRow(instance) then
+                print("FOUND TARGET IN ACTIVE UI: " .. tostring(text))
+                return text
+            end
+        end
+    end
+
+    return false
+end
+
+local function checkBackpack()
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    local character = LocalPlayer.Character
+
+    local function scanContainer(container)
+        if not container then return false end
+        for _, item in ipairs(container:GetChildren()) do
+            if (item:IsA("Tool") or item:IsA("Configuration")) and isTarget(item.Name) then
+                print("FOUND TARGET: " .. item.Name)
+                return item.Name
+            end
+        end
+        return false
+    end
+    local pet = scanContainer(backpack) or scanContainer(character) or checkActivePetGui()
+	
+	return pet
+end
+
+local function run()
+    local eggTool = LocalPlayer.Backpack:FindFirstChild("Common Egg")
+    local count = eggTool and eggTool:GetAttribute("Count") or 0
+    print("Egg count: " .. tostring(count))
+
+    for i = 1, count do
+        Networking.Egg.OpenEgg:Fire("Common Egg")
+        print("Opened egg " .. i .. "/" .. count)
+        task.wait(0.025)
+    end
+
+    print("Checking backpack...")
+    task.wait(5)
+
+    local petName = checkBackpack()
+
+    if petName then
+        print("Target pet found! Staying on server.")
+        SendWebhook(
+            "🥚 Target Pet Found!",
+            string.format("**Pet:** %s", petName)
+        )
+        return true
+    else
+        print("No target found. Rejoining...")
+        return false
+    end
+end
 
 pcall(function()
 	local controllers = PlayerScripts:WaitForChild("Controllers", 5)
@@ -1081,7 +1315,11 @@ local function findHeavyCarrotInGardenData(logBest)
 		bestCandidate = updateBestCarrotCandidate(bestCandidate, name, weight, nil, "GardenSync")
 
 		if weight and weight > CHECK_FRUIT_MIN_KG then
-			ClickDisable()
+			if not State.TargetFound then
+				State.TargetFound = true
+				ClickDisable()
+				SendWebhook("🎉 Carrot Achieved!",string.format("**Fruit:** %s\n**Weight:** %.2fkg",name,weight)) 
+			end
 			return {
 				Name = name,
 				Weight = weight,
@@ -1166,7 +1404,11 @@ local function findHeavyCarrotInGarden(plot, logBest)
 		)
 
 		if weight and weight > CHECK_FRUIT_MIN_KG then
-			ClickDisable()
+			if not State.TargetFound then
+				State.TargetFound = true
+				ClickDisable()
+				SendWebhook("🎉 Carrot Achieved!",string.format("**Fruit:** %s\n**Weight:** %.2fkg",candidate.Name,weight)) 
+			end
 			return {
 				Name = candidate.Name,
 				Weight = weight,
@@ -1186,52 +1428,80 @@ local function findHeavyCarrotInGarden(plot, logBest)
 end
 
 local function handleSeedDepleted(plot)
-	if State.DepletedHandled then
-		return
-	end
+    if State.DepletedHandled then
+        return
+    end
 
-	State.DepletedHandled = true
-	State.Running = false
-	log(("%s depleted | checking %s > %.2fkg"):format(
-		SEED_NAME,
-		CHECK_FRUIT_NAME,
-		CHECK_FRUIT_MIN_KG
-	))
+    State.DepletedHandled = true
+    State.Running = false
 
-	local found = findHeavyCarrotInGarden(plot, true)
-	if found then
-		log(("found %s %.2fkg > %.2fkg | stopping all functions"):format(
-			tostring(found.Name),
-			tonumber(found.Weight) or 0,
-			CHECK_FRUIT_MIN_KG
-		))
-		return
-	end
+    if State.TargetFound then
+        log(("Target %s %.2fkg found | finishing run"):format(
+            CHECK_FRUIT_NAME,
+            CHECK_FRUIT_MIN_KG
+        ))
+    else
+        log(("%s depleted | checking %s > %.2fkg"):format(
+            SEED_NAME,
+            CHECK_FRUIT_NAME,
+            CHECK_FRUIT_MIN_KG
+        ))
+    end
 
-	log(("%s depleted and no %s > %.2fkg found | rejoining in %d seconds"):format(
-		SEED_NAME,
-		CHECK_FRUIT_NAME,
-		CHECK_FRUIT_MIN_KG,
-		REJOIN_DELAY
-	))
+    local foundCarrot = findHeavyCarrotInGarden(plot, true)
 
-	task.wait(REJOIN_DELAY)
-	if not isActiveState() then
-		return
-	end
+    if foundCarrot then
+        log(("Found %s %.2fkg"):format(
+            foundCarrot.Name,
+            foundCarrot.Weight
+        ))
+    end
 
-	found = findHeavyCarrotInGarden(plot, false)
-	if found then
-		log(("found %s %.2fkg before rejoin | stopping"):format(
-			tostring(found.Name),
-			tonumber(found.Weight) or 0
-		))
-		return
-	end
+    if EGG_FARM then
+        local foundPet = run()
 
-	if isActiveState() then
-		Rejoin()
-	end
+        if foundPet then
+            return
+        end
+    end
+
+    if foundCarrot then
+        return
+    end
+
+    log(("%s depleted and no %s > %.2fkg found | rejoining in %d seconds"):format(
+        SEED_NAME,
+        CHECK_FRUIT_NAME,
+        CHECK_FRUIT_MIN_KG,
+        REJOIN_DELAY
+    ))
+
+    task.wait(REJOIN_DELAY)
+
+    if not isActiveState() then
+        return
+    end
+
+    foundCarrot = findHeavyCarrotInGarden(plot, false)
+
+    if foundCarrot then
+        log(("Found %s %.2fkg before rejoin"):format(
+            foundCarrot.Name,
+            foundCarrot.Weight
+        ))
+        return
+    end
+
+    if EGG_FARM then
+        local foundPet = run()
+        if foundPet then
+            return
+        end
+    end
+
+    if isActiveState() then
+        Rejoin()
+    end
 end
 
 local function plantSeedAt(position, seedName)
@@ -1399,6 +1669,7 @@ while State.Running do
 		plantPositions = newPlantPositions
 		positionIndex = 1
 		cyclePlantRequests = 0
+
 		log(("target ready | %s at %.3f, %.3f, %.3f | %s points=%d"):format(
 			SPRINKLER_NAME,
 			sprinklerPosition.X,
@@ -1411,36 +1682,51 @@ while State.Running do
 
 	local sprinklerReady, sprinklerReadyError = ensureSuperSprinkler(plot, currentSprinklerPosition)
 	if not sprinklerReady then
-		logStateOnce("sprinkler:" .. tostring(sprinklerReadyError), "sprinkler missing | " .. tostring(sprinklerReadyError))
+		logStateOnce(
+			"sprinkler:" .. tostring(sprinklerReadyError),
+			"sprinkler missing | " .. tostring(sprinklerReadyError)
+		)
 		task.wait(math.max(SPRINKLER_RECHECK_DELAY, 0.2))
 		continue
 	end
 
 	clearStateLog()
 
-	if positionIndex > #plantPositions then
-		if not getSeedTool(SEED_NAME) then
-			handleSeedDepleted(plot)
-		else
-			State.Running = false
-			log(("completed one %s planting pass | points=%d | stopping to avoid duplicate remote spam"):format(
-				SEED_NAME,
-				#plantPositions
-			))
-		end
+	-- Target carrot found
+	if State.TargetFound then
+		State.Running = false
+		log("Target carrot found. Stopping planting and preserving remaining seeds.")
 		break
 	end
 
+	-- Finished one planting ring
+	if positionIndex > #plantPositions then
+		if not getSeedTool(SEED_NAME) then
+			handleSeedDepleted(plot)
+			break
+		end
+
+		-- Start another planting ring
+		positionIndex = 1
+		cyclePlantRequests = 0
+
+		log(("Starting another %s planting pass..."):format(SEED_NAME))
+	end
+
 	local position = plantPositions[positionIndex]
-	positionIndex = positionIndex + 1
+	positionIndex += 1
 
 	local ok, err = plantSeedAt(position, SEED_NAME)
+
 	if ok then
-		totalPlantRequests = totalPlantRequests + 1
-		cyclePlantRequests = cyclePlantRequests + 1
+		totalPlantRequests += 1
+		cyclePlantRequests += 1
 
 		if cyclePlantRequests == 1 or totalPlantRequests % #plantPositions == 0 then
-			log(("%s loop running | total requests=%d"):format(SEED_NAME, totalPlantRequests))
+			log(("%s loop running | total requests=%d"):format(
+				SEED_NAME,
+				totalPlantRequests
+			))
 		end
 	else
 		if not getSeedTool(SEED_NAME) then
@@ -1448,7 +1734,11 @@ while State.Running do
 			break
 		end
 
-		logStateOnce("plant:" .. tostring(err), SEED_NAME .. " paused | " .. tostring(err))
+		logStateOnce(
+			"plant:" .. tostring(err),
+			SEED_NAME .. " paused | " .. tostring(err)
+		)
+
 		task.wait(0.5)
 	end
 
