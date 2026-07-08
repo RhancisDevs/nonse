@@ -1739,21 +1739,18 @@ while State.Running do
 
 	clearStateLog()
 
-	-- Target carrot found
 	if State.TargetFound then
 		State.Running = false
 		log("Target carrot found. Stopping planting and preserving remaining seeds.")
 		break
 	end
 
-	-- Finished one planting ring
 	if positionIndex > #plantPositions then
 		if not getSeedTool(SEED_NAME) then
 			handleSeedDepleted(plot)
 			break
 		end
 
-		-- Start another planting ring
 		positionIndex = 1
 		cyclePlantRequests = 0
 
