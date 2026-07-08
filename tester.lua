@@ -114,9 +114,9 @@ if EGG_FARM == nil then
     EGG_FARM = false
 end
 local SPRINKLER_NAME = "Super Sprinkler"
-local SEED_NAME = getgenv().Seeds or "Mega"
+local SEED_NAME = getgenv().Seeds or "Carrot"
 local CHECK_FRUIT_NAME = "Carrot"
-local CHECK_FRUIT_MIN_KG = getgenv().KG or 40
+local CHECK_FRUIT_MIN_KG = getgenv().KG or 1
 local REJOIN_DELAY = 5
 local CENTER_FORWARD_LENGTH = 27
 local CENTER_RIGHT_LENGTH = 30
@@ -1678,8 +1678,10 @@ if CheckGardenForTargetCarrot() then
     return
 end
 
+doRollback(true)
+
 while State.Running do
-	doRollback(true)
+	
 	local plot, sprinklerPosition, newPlantPositions, setupError = getTargetSetup()
 	if setupError then
 		logStateOnce("setup:" .. tostring(setupError), tostring(setupError))
@@ -1733,6 +1735,7 @@ while State.Running do
 	if State.TargetFound then
 		State.Running = false
 		log("Target carrot found. Stopping planting and preserving remaining seeds.")
+		doRollback(false)
 		break
 	end
 
