@@ -1688,6 +1688,9 @@ if CheckGardenForTargetCarrot() then
     return
 end
 
+local lastCarrotCheck = 0
+local CARROT_CHECK_INTERVAL = 2
+
 while State.Running do
 	local plot, sprinklerPosition, newPlantPositions, setupError = getTargetSetup()
 	if setupError then
