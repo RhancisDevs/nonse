@@ -2,96 +2,89 @@ repeat task.wait() until game:IsLoaded()
 
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
 local VIM = game:GetService("VirtualInputManager")
+
 local LOCAL_PLAYER = Players.LocalPlayer
+local LOADING_TIMEOUT = 60
+
+local function Rejoin()
+	local player = Players.LocalPlayer
+	if player then
+		TeleportService:Teleport(game.PlaceId, player)
+	end
+end
 
 local function isMobile()
-    return UserInputService.TouchEnabled
+	return UserInputService.TouchEnabled
 end
 
 local function isPC()
-    return UserInputService.KeyboardEnabled
-        and UserInputService.MouseEnabled
-        and not UserInputService.TouchEnabled
+	return UserInputService.KeyboardEnabled
+		and UserInputService.MouseEnabled
+		and not UserInputService.TouchEnabled
 end
 
 local function simulateTap()
-    local camera = workspace.CurrentCamera
-    if not camera then return end
-    local viewport = camera.ViewportSize
-    local x = 35
-    local y = viewport.Y - 35
-    if isMobile() then
-        pcall(function()
-            VIM:SendTouchEvent(1, 0, x, y)
-            task.wait(0.08)
-            VIM:SendTouchEvent(1, 2, x, y)
-        end)
-    elseif isPC() then
-        pcall(function()
-            VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
-            task.wait(0.05)
-            VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
-        end)
-    end
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return
+	end
+
+	local viewport = camera.ViewportSize
+	local x = 35
+	local y = viewport.Y - 35
+
+	if isMobile() then
+		pcall(function()
+			VIM:SendTouchEvent(1, 0, x, y)
+			task.wait(0.08)
+			VIM:SendTouchEvent(1, 2, x, y)
+		end)
+	elseif isPC() then
+		pcall(function()
+			VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
+			task.wait(0.05)
+			VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
+		end)
+	end
 end
 
-repeat
-    simulateTap()
-    task.wait(1)
-until not LOCAL_PLAYER:GetAttribute("LoadingScreenActive") or LOCAL_PLAYER:GetAttribute("LoadingScreenDone") == true
+local timedOut = false
+local startTime
 
-loadstring(game:HttpGet("https://hybrid-e3.com/api/scripts/607034550f534374b8fc5feb1c6ef466/loader?key=PAID-4LJT-0PLB-VM3N-N1FY"))()
-task.wait(2)
-local CoreGui = game:GetService("CoreGui")
+while true do
+	simulateTap()
 
-local obsidian
-for _, v in ipairs(CoreGui:GetDescendants()) do
-    if v.Name == "Obsidian" then
-        obsidian = v
-        break
-    end
+	local loadingActive = LOCAL_PLAYER:GetAttribute("LoadingScreenActive")
+	local loadingDone = LOCAL_PLAYER:GetAttribute("LoadingScreenDone")
+
+	if not loadingActive or loadingDone == true then
+		break
+	end
+
+	if not startTime then
+		startTime = os.clock()
+	end
+
+	if not timedOut and os.clock() - startTime >= LOADING_TIMEOUT then
+		timedOut = true
+		print("Loading exceeded 60 seconds. Waiting for loading to finish before rejoining...")
+	end
+
+	task.wait(1)
 end
 
-if not obsidian then
-    warn("Obsidian not found")
-    return
+if timedOut then
+	while LOCAL_PLAYER:GetAttribute("LoadingScreenDone") ~= true do
+		task.wait(0.5)
+	end
+
+	Rejoin()
+	return
 end
 
-local container = obsidian.Main.Container
-local frame = container:FindFirstChild("CanvasGroup")
-    and container.CanvasGroup.Frame
-    or container.Frame
-
-local button = frame.ScrollingFrame:GetChildren()[5].Frame:GetChildren()[7].TextButton
-
-local statusLabel = frame:GetChildren()[2]:GetChildren()[5].Frame:GetChildren()[7].TextLabel
-
-local function click(btn)
-    if not btn or not firesignal then
-        return
-    end
-
-    pcall(firesignal, btn.Activated)
-    pcall(firesignal, btn.MouseButton1Click)
-    pcall(firesignal, btn.MouseButton1Down)
-    pcall(firesignal, btn.MouseButton1Up)
-end
-
-local function ClickEnable()
-    if statusLabel.Text == "Status : Off 🔴" then
-        click(button)
-    end
-end
-
-local function ClickDisable()
-    if statusLabel.Text == "Status : On 🟢" then
-        click(button)
-    end
-end
-ClickEnable()
 task.wait(1)
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 local TeleportService = game:GetService("TeleportService")
@@ -104,10 +97,13 @@ local NotificationController = require(
     game:GetService("Players").LocalPlayer.PlayerScripts.Controllers.NotificationController
 )
 
-NotificationController:CreateNotification(
-    "Welcome to Jay Hub!", 
-    Color3.fromRGB(71, 123, 255)
-)
+function doRollback(bool)
+    ReplicatedStorage.SharedModules.Packet.RemoteEvent:FireServer(buffer.fromstring(("6\000\001%*"):format(bool and "\255" or "\0")))
+end
+
+NotificationController:CreateNotification("Welcome to Jay Hub!")
+task.wait(1)
+NotificationController:CreateNotification("Shout out kay juse. lab u!")
 
 local WEBHOOK_URL = getgenv().Webhook or ""
 local SEND_WEBHOOK = WEBHOOK_URL ~= ""
@@ -602,12 +598,6 @@ local function fruitMatchesTargetName(fruitModel, plantModel)
 	return false, getFruitName(fruitModel, plantModel)
 end
 
-local function Rejoin()
-	local player = Players.LocalPlayer
-	if player then
-		TeleportService:Teleport(game.PlaceId, player)
-	end
-end
 
 local function getPlot()
 	local gardens = workspace:FindFirstChild("Gardens")
@@ -1318,7 +1308,7 @@ local function findHeavyCarrotInGardenData(logBest)
 		if weight and weight > CHECK_FRUIT_MIN_KG then
 			if not State.TargetFound then
 				State.TargetFound = true
-				ClickDisable()
+				doRollback(false)
 				SendWebhook("🎉 Carrot Achieved!",string.format("**Fruit:** %s\n**Weight:** %.2fkg", name, weight))
 				task.delay(1, function() LocalPlayer:Kick(string.format("Target reached!\n%s: %.2fkg", name, weight ))
 				    end)
@@ -1409,7 +1399,7 @@ local function findHeavyCarrotInGarden(plot, logBest)
 		if weight and weight > CHECK_FRUIT_MIN_KG then
 			if not State.TargetFound then
 				State.TargetFound = true
-				ClickDisable()
+				doRollback(false)
 				SendWebhook("🎉 Carrot Achieved!",string.format("**Fruit:** %s\n**Weight:** %.2fkg",candidate.Name,weight ))
 				task.delay(1, function() LocalPlayer:Kick(string.format("Target reached!\n%s: %.2fkg", candidate.Name, weight ))
 				    end)
@@ -1688,10 +1678,8 @@ if CheckGardenForTargetCarrot() then
     return
 end
 
-local lastCarrotCheck = 0
-local CARROT_CHECK_INTERVAL = 2
-
 while State.Running do
+	doRollback(true)
 	local plot, sprinklerPosition, newPlantPositions, setupError = getTargetSetup()
 	if setupError then
 		logStateOnce("setup:" .. tostring(setupError), tostring(setupError))
@@ -1742,14 +1730,10 @@ while State.Running do
 
 	clearStateLog()
 
-	if os.clock() - lastCarrotCheck >= CARROT_CHECK_INTERVAL then
-		lastCarrotCheck = os.clock()
-	
-		local foundCarrot = findHeavyCarrotInGarden(plot, false)
-		if foundCarrot then
-			State.Running = false
-			break
-		end
+	if State.TargetFound then
+		State.Running = false
+		log("Target carrot found. Stopping planting and preserving remaining seeds.")
+		break
 	end
 
 	if positionIndex > #plantPositions then
