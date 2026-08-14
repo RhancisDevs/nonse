@@ -12,7 +12,6 @@ local LocalPlayer = Players.LocalPlayer
 local PLACE_ID = game.PlaceId
 
 local FILE_NAME = "player_jobs.json"
-local MAX_PLAYERS = 3
 
 local hopping = false
 local LastAttemptedJobId = nil
@@ -101,13 +100,10 @@ local function findServer()
 
         for _, server in ipairs(data.data) do
             local serverId = server.id
-            local playerCount = server.playing or 0
-            local maxPlayers = server.maxPlayers or 0
 
             if serverId
                 and serverId ~= game.JobId
-                and playerCount <= MAX_PLAYERS
-                and playerCount < maxPlayers
+                and server.playing < server.maxPlayers
                 and not getJobOwner(jobs, serverId) then
 
                 return serverId
@@ -132,7 +128,7 @@ local function jobIdHop()
     local serverId = findServer()
 
     if not serverId then
-        warn("[Hop] No suitable server found.")
+        warn("[Hop] No unregistered server found.")
         task.wait(1)
         return jobIdHop()
     end
@@ -152,11 +148,8 @@ local function jobIdHop()
 
     if not ok then
         warn("[Hop] Teleport call failed.")
-
         LastAttemptedJobId = nil
-
         task.wait(0.5)
-
         return jobIdHop()
     end
 end
@@ -170,6 +163,13 @@ TeleportService.TeleportInitFailed:Connect(function(_, result)
 
     if result == Enum.TeleportResult.GameFull then
         warn("[Hop] Game is full.")
+
+        if LastHopMethod == "jobId" and LastAttemptedJobId then
+            LastAttemptedJobId = nil
+            task.wait(0.5)
+            jobIdHop()
+            return
+        end
     end
 
     LastAttemptedJobId = nil
@@ -179,31 +179,6 @@ TeleportService.TeleportInitFailed:Connect(function(_, result)
     jobIdHop()
 end)
 
-local function getPlayerCount()
-    return #Players:GetPlayers()
-end
-
-local function checkPlayerCount()
-    if hopping then
-        return
-    end
-
-    local count = getPlayerCount()
-
-    print("[JobTracker] Players:", count)
-
-    if count > MAX_PLAYERS then
-        warn(
-            "[JobTracker] Server has",
-            count,
-            "players. Hopping..."
-        )
-
-        hopping = true
-        jobIdHop()
-    end
-end
-
 local function checkCurrentServer()
     local jobs = loadJobs()
     local currentJobId = game.JobId
@@ -212,7 +187,7 @@ local function checkCurrentServer()
 
     if owner and owner ~= LocalPlayer.Name then
         warn(
-            "[JobTracker] JobId conflict!",
+            "[JobTracker] CONFLICT:",
             currentJobId,
             "belongs to",
             owner
@@ -226,7 +201,7 @@ local function checkCurrentServer()
 
     if owner == LocalPlayer.Name then
         print(
-            "[JobTracker] Current server belongs to this account:",
+            "[JobTracker] Server belongs to this account:",
             currentJobId
         )
 
@@ -246,29 +221,4 @@ local function checkCurrentServer()
     return true
 end
 
-Players.ChildAdded:Connect(function(child)
-    if not child:IsA("Player") then
-        return
-    end
-
-    task.defer(function()
-        checkPlayerCount()
-    end)
-end)
-
-Players.ChildRemoved:Connect(function(child)
-    if not child:IsA("Player") then
-        return
-    end
-
-    task.defer(function()
-        checkPlayerCount()
-    end)
-end)
-
 checkCurrentServer()
-
-task.defer(function()
-    task.wait(1)
-    checkPlayerCount()
-end)
