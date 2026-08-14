@@ -1,3 +1,8 @@
+-- latest
+
+workspace.ClientRenderedAssets:Destroy()
+workspace:GetChildren()[17]:Destroy()
+
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
