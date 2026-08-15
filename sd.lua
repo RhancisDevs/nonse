@@ -1,4 +1,4 @@
--- latest
+-- latest v1
 
 workspace.ClientRenderedAssets:Destroy()
 workspace.PlacedEggRenders:Destroy()
@@ -11,7 +11,7 @@ local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 local PLACE_ID = game.PlaceId
 
-local API_URL = "http://us3.bot-hosting.net:21088/"
+local API_URL = "http://us3.bot-hosting.net:21088"
 
 local hopping = false
 local LastAttemptedJobId = nil
@@ -112,7 +112,7 @@ local function getJobOwner(jobs, jobId)
     end
 
     return nil
-end-
+end
 
 local function fetchServerPage(cursor)
     cursor = cursor or ""
@@ -263,7 +263,6 @@ local function checkCurrentServer()
         )
 
         hopping = true
-
         jobIdHop()
 
         return false
