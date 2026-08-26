@@ -1,4 +1,4 @@
--- latest - high tech
+-- latest high tech
 
 pcall(function()
     workspace.ClientRenderedAssets:Destroy()
