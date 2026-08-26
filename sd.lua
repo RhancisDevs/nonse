@@ -1,21 +1,53 @@
--- latest v1
+-- latest - high tech
 
-workspace.ClientRenderedAssets:Destroy()
-workspace.PlacedEggRenders:Destroy()
-workspace.PlacedEggRenders:Destroy()
+pcall(function()
+    workspace.ClientRenderedAssets:Destroy()
+end)
+
+pcall(function()
+    workspace.PlacedEggRenders:Destroy()
+end)
+
+pcall(function()
+    workspace.PlacedEggRenders:Destroy()
+end)
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local EggCmds = require(
+    ReplicatedStorage.Library.Client.EggCmds
+)
 
 local LocalPlayer = Players.LocalPlayer
 local PLACE_ID = game.PlaceId
 
 local API_URL = "http://us3.bot-hosting.net:21088"
 
+local MAX_PLAYERS = 2
+local PROTECTED_USERNAME = "amine100a"
+
+local pet_target = {
+    "Kitsune",
+    "Unicorn",
+    "Oni Tiger",
+    "Eternal Lunar Dragon",
+    "Mosasaurus",
+    "Stag",
+    "El Maja",
+    "Lava Dragon",
+    "Phoenix",
+    "Ice Dragon",
+    "Cosmic Dragon"
+}
+
 local hopping = false
 local LastAttemptedJobId = nil
 local LastHopMethod = nil
+
+local eggCache = {}
 
 local function sendRequest(options)
     local ok, result = pcall(function()
@@ -154,10 +186,13 @@ local function findServer()
 
         for _, server in ipairs(data.data) do
             local serverId = server.id
+            local playerCount = server.playing or 0
+            local maxPlayers = server.maxPlayers or 0
 
             if serverId
                 and serverId ~= game.JobId
-                and server.playing < server.maxPlayers
+                and playerCount <= MAX_PLAYERS
+                and playerCount < maxPlayers
                 and not getJobOwner(jobs, serverId) then
 
                 return serverId
@@ -182,7 +217,7 @@ local function jobIdHop()
     local serverId = findServer()
 
     if not serverId then
-        warn("[Hop] No unregistered server found.")
+        warn("[Hop] No suitable server found.")
         task.wait(1)
         return jobIdHop()
     end
@@ -220,16 +255,6 @@ TeleportService.TeleportInitFailed:Connect(function(_, result)
 
     if result == Enum.TeleportResult.GameFull then
         warn("[Hop] Game is full.")
-
-        if LastHopMethod == "jobId" and LastAttemptedJobId then
-            LastAttemptedJobId = nil
-
-            task.wait(0.5)
-
-            jobIdHop()
-
-            return
-        end
     end
 
     LastAttemptedJobId = nil
@@ -239,7 +264,117 @@ TeleportService.TeleportInitFailed:Connect(function(_, result)
     jobIdHop()
 end)
 
+local function isProtectedPlayerPresent()
+    return Players:FindFirstChild(PROTECTED_USERNAME) ~= nil
+end
+
+local function isTargetPet(assetCategory)
+    for _, target in ipairs(pet_target) do
+        if assetCategory == target then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function LoadEggCache(snapshot)
+    table.clear(eggCache)
+
+    if not snapshot or type(snapshot.Records) ~= "table" then
+        return
+    end
+
+    for _, egg in ipairs(snapshot.Records) do
+        if egg.Uid then
+            eggCache[egg.Uid] = egg.AssetCategory
+        end
+    end
+end
+
+local function hasTargetPetFromCache()
+    for _, assetCategory in pairs(eggCache) do
+        if isTargetPet(assetCategory) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function refreshTargetPetState()
+    local snapshot = EggCmds.GetAreaEggSnapshot()
+
+    if not snapshot or type(snapshot.Records) ~= "table" then
+        return false
+    end
+
+    LoadEggCache(snapshot)
+
+    for _, egg in ipairs(snapshot.Records) do
+        if isTargetPet(egg.AssetCategory) then
+            print(
+                "[PetTracker] Target found:",
+                egg.AssetCategory,
+                "| UID:",
+                tostring(egg.Uid)
+            )
+
+            return true
+        end
+    end
+
+    return false
+end
+
+local function getPlayerCount()
+    return #Players:GetPlayers()
+end
+
+local function checkPlayerCount()
+    if hopping then
+        return false
+    end
+
+    local count = getPlayerCount()
+
+    print("[JobTracker] Players:", count)
+
+    if isProtectedPlayerPresent() then
+        print(
+            "[JobTracker] Protected player present:",
+            PROTECTED_USERNAME
+        )
+
+        return true
+    end
+
+    if hasTargetPetFromCache() then
+        print("[PetTracker] Target pet is present.")
+        return true
+    end
+
+    if count > MAX_PLAYERS then
+        warn(
+            "[JobTracker] Too many players:",
+            count,
+            "-> server hopping"
+        )
+
+        hopping = true
+        jobIdHop()
+
+        return false
+    end
+
+    return true
+end
+
 local function checkCurrentServer()
+    if hopping then
+        return false
+    end
+
     local jobs = fetchJobs()
 
     if not jobs then
@@ -274,7 +409,13 @@ local function checkCurrentServer()
             currentJobId
         )
 
-        return true
+        return checkPlayerCount()
+    end
+
+    local targetPetExists = refreshTargetPetState()
+
+    if targetPetExists then
+        print("[PetTracker] Target pet found. Staying.")
     end
 
     local success = registerJob(
@@ -290,10 +431,77 @@ local function checkCurrentServer()
             currentJobId
         )
 
-        return true
+        return checkPlayerCount()
     end
 
     return false
 end
+
+Players.ChildAdded:Connect(function(child)
+    if not child:IsA("Player") then
+        return
+    end
+
+    task.defer(function()
+        checkPlayerCount()
+    end)
+end)
+
+Players.ChildRemoved:Connect(function(child)
+    if not child:IsA("Player") then
+        return
+    end
+
+    task.defer(function()
+        checkPlayerCount()
+    end)
+end)
+
+EggCmds.AreaEggSnapshotUpdated:Connect(function(snapshot)
+    LoadEggCache(snapshot)
+
+    if hopping then
+        return
+    end
+
+    if hasTargetPetFromCache() then
+        print("[PetTracker] Target pet detected after snapshot update.")
+        return
+    end
+
+    checkPlayerCount()
+end)
+
+EggCmds.AreaEggRemoved:Connect(function(uid)
+    local assetCategory = eggCache[uid]
+
+    print(
+        "[PetTracker] Removed:",
+        assetCategory or "Unknown",
+        "| UID:",
+        tostring(uid)
+    )
+
+    local wasTarget = assetCategory and isTargetPet(assetCategory)
+
+    eggCache[uid] = nil
+
+    if not wasTarget or hopping then
+        return
+    end
+
+    task.defer(function()
+        local targetStillExists = refreshTargetPetState()
+
+        if targetStillExists then
+            print("[PetTracker] Another target pet is still present.")
+            return
+        end
+
+        print("[PetTracker] No target pets remain.")
+
+        checkPlayerCount()
+    end)
+end)
 
 checkCurrentServer()
