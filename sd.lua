@@ -26,7 +26,7 @@ local PLACE_ID = game.PlaceId
 
 local API_URL = "http://us3.bot-hosting.net:21088"
 
-local MAX_PLAYERS = 3
+local MAX_PLAYERS = 2
 local PROTECTED_USERNAME = "amine100a"
 
 local pet_target = {
