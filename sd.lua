@@ -6,7 +6,7 @@ local LocalPlayer = Players.LocalPlayer
 local PLACE_ID = game.PlaceId
 
 local API_URL = "http://us3.bot-hosting.net:21088"
-local MAX_PLAYERS = 6
+local MAX_PLAYERS = 3
 local PROTECTED_USERNAME = "amine100a"
 
 local hopping = false
